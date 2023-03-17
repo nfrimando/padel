@@ -1,0 +1,132 @@
+---
+title: "Padel Analytics"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: rows
+    vertical_layout: fill
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(tidyverse)
+library(glue)
+library(googlesheets4)
+
+# Inputs
+dt <- read_sheet(
+  'https://docs.google.com/spreadsheets/d/1wEG4Z8zCMVmBjroEG5X3wS6PISXJDMfJu8TCWOm99KY/edit#gid=868738369',
+  sheet = 'Padel Games Analysis'
+) %>% 
+  filter(match == 3) %>% 
+  filter(set == 1)
+
+# Players
+pair_1 <- c("Nigel", "Pia")
+pair_2 <- c("Marvin", "Merick")
+
+# Data Prep
+prepped.dt <- dt %>%
+  # Labelling stats if good or bad
+  mutate(point_type_bool = case_when(
+    point_type == "Unforced Error" ~ -1,
+    point_type == "Winner" ~ 1,
+    TRUE ~ as.numeric(NA)
+  )) %>% 
+  # Labelling which side won
+  mutate(winner = case_when(
+    point_type_bool == 1 & player %in% pair_1 ~ "pair_1",
+    point_type_bool == 1 & player %in% pair_2 ~ "pair_2",
+    point_type_bool == -1 & player %in% pair_1 ~ "pair_2",
+    point_type_bool == -1 & player %in% pair_2 ~ "pair_1"
+  )) %>% 
+  # Assigning rally num
+  group_by(match, set, game) %>% 
+  mutate(rally = row_number()) %>% 
+  mutate(score_pair_1 = cumsum(winner == "pair_1")) %>% 
+  mutate(score_pair_2 = cumsum(winner == "pair_2"))
+```
+
+Game Overview
+===================================== 
+
+# Row
+-----------------------------
+
+### Score
+
+```{r}
+score.dt <- prepped.dt %>% 
+  group_by(game) %>% 
+  arrange(desc(rally)) %>% 
+  filter(row_number() == 1) %>% 
+  ungroup() %>% 
+  group_by(winner) %>% 
+  summarise(count = n())
+
+valueBox(
+  value = glue(
+    (score.dt %>% filter(winner == 'pair_1'))$count, "-",
+    (score.dt %>% filter(winner == 'pair_2'))$count
+  )
+)
+```
+
+### Pair 1
+
+```{r}
+valueBox(value = paste0(pair_1, collapse = ", "))
+```
+
+
+### Pair 2
+
+```{r}
+valueBox(value = paste0(pair_2, collapse = ", "))
+```
+
+# Row
+-----------------------------
+
+### Performance 
+
+```{r}
+prepped.dt %>%
+  group_by(player) %>%
+  mutate(order = row_number()) %>%
+  mutate(cumulative_perf = cumsum(point_type_bool)) %>%
+  ungroup(player) %>%
+  select(player, cumulative_perf, order) %>%
+  ggplot() +
+  geom_line(
+    mapping = aes(x = order, y = cumulative_perf)
+  ) +
+  facet_wrap(~player, ncol = 4)
+```
+
+### Top Shots
+
+```{r}
+prepped.dt %>%
+  group_by(player, point_type, shot_type) %>%
+  summarise(count = n()) %>%
+  ungroup() %>%
+  group_by(player) %>% 
+  complete(point_type, shot_type, fill = list(count = 0)) %>% 
+  # arrange(player, point_type, desc(count)) %>% 
+  ggplot() +
+  geom_bar(
+    mapping = aes(x = shot_type, y = count, fill = point_type),
+    position = 'dodge',
+    stat = 'identity'
+  ) +
+  coord_flip() + 
+  facet_wrap(~player, ncol = 2) +
+  labs(title = "Shot Winners and Errors") +
+  theme_minimal() + 
+  theme(
+    legend.position = "none",
+    axis.title = element_blank(),
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
