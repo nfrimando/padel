@@ -17,12 +17,12 @@ dt <- read_sheet(
   'https://docs.google.com/spreadsheets/d/1wEG4Z8zCMVmBjroEG5X3wS6PISXJDMfJu8TCWOm99KY/edit#gid=868738369',
   sheet = 'Padel Games Analysis'
 ) %>% 
-  filter(match == 3) %>% 
+  filter(match == 5) %>% 
   filter(set == 1)
 
 # Players
-pair_1 <- c("Nigel", "Pia")
-pair_2 <- c("Marvin", "Merick")
+pair_1 <- c("Peach", "Maria")
+pair_2 <- c("Kat", "Eldes")
 
 # Data Prep
 prepped.dt <- dt %>%
@@ -63,10 +63,13 @@ score.dt <- prepped.dt %>%
   group_by(winner) %>% 
   summarise(count = n())
 
+pair1_score <- (score.dt %>% filter(winner == 'pair_1'))$count
+pair2_score <- (score.dt %>% filter(winner == 'pair_2'))$count
+
 valueBox(
   value = glue(
-    (score.dt %>% filter(winner == 'pair_1'))$count, "-",
-    (score.dt %>% filter(winner == 'pair_2'))$count
+    ifelse(length(pair1_score) == 0, 0, pair1_score), "-",
+    ifelse(length(pair2_score) == 0, 0, pair2_score)
   )
 )
 ```
